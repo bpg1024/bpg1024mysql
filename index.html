@@ -399,7 +399,6 @@
       <div class="value" id="statGoal">Tap to set</div>
       <div class="goal-bar"><div id="goalBarFill"></div></div>
     </div>
-    <div class="stat"><div class="label">Win Rate (days)</div><div class="value" id="statWinRate">–</div></div>
     <div class="stat"><div class="label">Green / Red Days</div><div class="value" id="statDays">0 / 0</div></div>
     <div class="stat"><div class="label">Best Day</div><div class="value" id="statBest">–</div></div>
     <div class="stat"><div class="label">Worst Day</div><div class="value" id="statWorst">–</div></div>
@@ -613,11 +612,8 @@
       if (worst === null || t < worst) worst = t;
     }
 
-    const tradedDays = greenDays + redDays;
     setStat('statTotal', fmtMoney(total), total);
     renderGoal(total);
-    document.getElementById('statWinRate').textContent =
-      tradedDays ? Math.round((greenDays / tradedDays) * 100) + '%' : '–';
     document.getElementById('statDays').innerHTML =
       '<span class="pos">' + greenDays + '</span> / <span class="neg">' + redDays + '</span>';
     setStat('statBest', best === null ? '–' : fmtMoney(best), best === null ? 0 : best);
