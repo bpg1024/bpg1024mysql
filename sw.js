@@ -1,4 +1,4 @@
-const CACHE = 'pnl-calendar-v3';
+const CACHE = 'pnl-calendar-v4';
 const ASSETS = [
   './',
   './index.html',
