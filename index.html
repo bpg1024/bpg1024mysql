@@ -40,6 +40,7 @@
     --red-bg: rgba(239, 83, 80, 0.24);
     --accent: #1d7fd6;
     --accent-soft: rgba(29, 127, 214, 0.15);
+    --weekend-bg: rgba(90, 110, 130, 0.13);
     --card-shadow: 0 8px 32px rgba(35, 90, 140, 0.18);
     --glow: none;
   }
@@ -59,6 +60,7 @@
     --red-bg: rgba(251, 113, 133, 0.16);
     --accent: #a78bfa;
     --accent-soft: rgba(167, 139, 250, 0.18);
+    --weekend-bg: rgba(255, 255, 255, 0.05);
     --card-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
     --glow: 0 0 18px rgba(167, 139, 250, 0.35);
   }
@@ -175,6 +177,24 @@
   .pos { color: var(--green); }
   .neg { color: var(--red); }
 
+  .stat.goal { cursor: pointer; }
+  .stat.goal .value { font-size: 16px; }
+  .goal-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--accent-soft);
+    margin-top: 9px;
+    overflow: hidden;
+  }
+  .goal-bar div {
+    height: 100%;
+    width: 0;
+    border-radius: 3px;
+    background: var(--accent);
+    transition: width 0.5s ease, background 0.3s ease;
+  }
+  .goal-bar div.reached { background: var(--green); }
+
   /* ---------- calendar ---------- */
   .calendar {
     background: var(--surface);
@@ -218,6 +238,11 @@
   .day.empty:hover { background: transparent; }
   .day.profit { background: var(--green-bg); }
   .day.loss { background: var(--red-bg); }
+  .day.weekend { background: var(--weekend-bg); cursor: default; }
+  .day.weekend:hover { background: var(--weekend-bg); }
+  .day.weekend .num { opacity: 0.45; }
+  .day.weekend.has-trades { cursor: pointer; }
+  .weekdays div:first-child, .weekdays div:last-child { opacity: 0.45; }
   .day .num { font-size: 13px; color: var(--text-dim); font-weight: 600; }
   .day.today .num {
     color: #fff;
@@ -369,6 +394,11 @@
 
   <div class="stats">
     <div class="stat"><div class="label">Monthly P&amp;L</div><div class="value" id="statTotal">$0.00</div></div>
+    <div class="stat goal" id="goalCard" title="Tap to set your monthly goal">
+      <div class="label">Monthly Goal</div>
+      <div class="value" id="statGoal">Tap to set</div>
+      <div class="goal-bar"><div id="goalBarFill"></div></div>
+    </div>
     <div class="stat"><div class="label">Win Rate (days)</div><div class="value" id="statWinRate">–</div></div>
     <div class="stat"><div class="label">Green / Red Days</div><div class="value" id="statDays">0 / 0</div></div>
     <div class="stat"><div class="label">Best Day</div><div class="value" id="statBest">–</div></div>
@@ -414,6 +444,7 @@
 (function () {
   const STORAGE_KEY = 'pnl-calendar-trades-v1';
   const THEME_KEY = 'pnl-calendar-theme';
+  const GOAL_KEY = 'pnl-calendar-goal';
 
   // ---------- Theme: blue skies by day, cosmic by night ----------
   const themeBtn = document.getElementById('themeBtn');
@@ -518,10 +549,17 @@
       const list = trades[key] || [];
       const total = dayTotal(key);
 
+      const dow = (firstDow + d - 1) % 7;
+      const isWeekend = dow === 0 || dow === 6;
+
       const cell = document.createElement('div');
       cell.className = 'day';
       if (list.length) cell.classList.add(total >= 0 ? 'profit' : 'loss');
       if (key === todayKey) cell.classList.add('today');
+      if (isWeekend) {
+        cell.classList.add('weekend');
+        if (list.length) cell.classList.add('has-trades');
+      }
 
       const num = document.createElement('span');
       num.className = 'num';
@@ -540,7 +578,8 @@
         cell.appendChild(count);
       }
 
-      cell.addEventListener('click', () => openDay(key));
+      // weekends aren't tradable — only clickable if old trades exist on them
+      if (!isWeekend || list.length) cell.addEventListener('click', () => openDay(key));
       week.appendChild(cell);
 
       if ((firstDow + d) % 7 === 0 || d === daysInMonth) {
@@ -576,6 +615,7 @@
 
     const tradedDays = greenDays + redDays;
     setStat('statTotal', fmtMoney(total), total);
+    renderGoal(total);
     document.getElementById('statWinRate').textContent =
       tradedDays ? Math.round((greenDays / tradedDays) * 100) + '%' : '–';
     document.getElementById('statDays').innerHTML =
@@ -591,6 +631,41 @@
     el.classList.toggle('pos', value > 0);
     el.classList.toggle('neg', value < 0);
   }
+
+  // ---------- Monthly goal ----------
+  let goal = parseFloat(localStorage.getItem(GOAL_KEY)) || 0;
+
+  function renderGoal(total) {
+    const valEl = document.getElementById('statGoal');
+    const bar = document.getElementById('goalBarFill');
+    if (goal > 0) {
+      const pct = Math.max(0, Math.min(100, (total / goal) * 100));
+      const reached = total >= goal;
+      valEl.textContent = fmtMoney(total) + ' / ' + fmtMoney(goal);
+      valEl.classList.toggle('pos', reached);
+      valEl.classList.remove('neg');
+      bar.style.width = pct + '%';
+      bar.classList.toggle('reached', reached);
+    } else {
+      valEl.textContent = 'Tap to set';
+      valEl.classList.remove('pos', 'neg');
+      bar.style.width = '0%';
+      bar.classList.remove('reached');
+    }
+  }
+
+  document.getElementById('goalCard').addEventListener('click', () => {
+    const input = prompt('Set your monthly P&L goal in $ (enter 0 to remove):', goal || '');
+    if (input === null) return;
+    const v = parseFloat(input);
+    if (isNaN(v) || v < 0) {
+      alert('Please enter a valid dollar amount.');
+      return;
+    }
+    goal = v;
+    localStorage.setItem(GOAL_KEY, String(goal));
+    render();
+  });
 
   // ---------- Day modal ----------
   const overlay = document.getElementById('overlay');
