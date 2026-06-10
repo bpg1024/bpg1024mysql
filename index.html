@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PnL Calendar</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --surface: #181b22;
+    --surface-2: #1f232c;
+    --border: #2a2f3a;
+    --text: #e8eaf0;
+    --text-dim: #9aa1b0;
+    --green: #22c55e;
+    --green-bg: rgba(34, 197, 94, 0.14);
+    --red: #ef4444;
+    --red-bg: rgba(239, 68, 68, 0.14);
+    --accent: #6366f1;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  header h1 { font-size: 22px; font-weight: 700; }
+  header h1 span { color: var(--accent); }
+
+  .month-nav { display: flex; align-items: center; gap: 8px; }
+  .month-nav button {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 15px;
+    cursor: pointer;
+  }
+  .month-nav button:hover { background: var(--border); }
+  .month-label {
+    font-size: 18px;
+    font-weight: 600;
+    min-width: 180px;
+    text-align: center;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .stat .label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .stat .value { font-size: 20px; font-weight: 700; }
+  .pos { color: var(--green); }
+  .neg { color: var(--red); }
+
+  .calendar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .weekdays, .week {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+  }
+  .weekdays div {
+    padding: 10px 8px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+  .day {
+    min-height: 96px;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 8px;
+    cursor: pointer;
+    transition: background 0.12s;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .week .day:last-child { border-right: none; }
+  .calendar .week:last-child .day { border-bottom: none; }
+  .day:hover { background: var(--surface-2); }
+  .day.empty { cursor: default; background: transparent; }
+  .day.empty:hover { background: transparent; }
+  .day.profit { background: var(--green-bg); }
+  .day.loss { background: var(--red-bg); }
+  .day.profit:hover, .day.loss:hover { filter: brightness(1.25); }
+  .day .num { font-size: 13px; color: var(--text-dim); }
+  .day.today .num {
+    color: #fff;
+    background: var(--accent);
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .day .pnl { font-size: 15px; font-weight: 700; }
+  .day .count { font-size: 11px; color: var(--text-dim); }
+
+  /* Modal */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 16px;
+    overflow-y: auto;
+    z-index: 10;
+  }
+  .overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    width: 100%;
+    max-width: 520px;
+    padding: 20px;
+  }
+  .modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .modal-head h2 { font-size: 17px; }
+  .modal-head .day-total { font-size: 15px; font-weight: 700; }
+  .close-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 22px;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .close-btn:hover { color: var(--text); }
+
+  .trade-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .trade {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .trade .sym { font-weight: 700; min-width: 64px; }
+  .trade .note { flex: 1; font-size: 13px; color: var(--text-dim); overflow-wrap: anywhere; }
+  .trade .amt { font-weight: 700; white-space: nowrap; }
+  .trade .del {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 16px;
+  }
+  .trade .del:hover { color: var(--red); }
+  .no-trades { color: var(--text-dim); font-size: 14px; text-align: center; padding: 12px 0; }
+
+  .trade-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .trade-form .full { grid-column: 1 / -1; }
+  .trade-form label { font-size: 12px; color: var(--text-dim); display: block; margin-bottom: 4px; }
+  .trade-form input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 9px 10px;
+    font-size: 14px;
+  }
+  .trade-form input:focus { outline: none; border-color: var(--accent); }
+  .trade-form button {
+    grid-column: 1 / -1;
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    font-weight: 600;
+    font-size: 14px;
+    border-radius: 8px;
+    padding: 11px;
+    cursor: pointer;
+  }
+  .trade-form button:hover { filter: brightness(1.1); }
+
+  .toolbar { display: flex; gap: 8px; }
+  .toolbar button {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .toolbar button:hover { color: var(--text); background: var(--border); }
+
+  @media (max-width: 640px) {
+    .day { min-height: 70px; padding: 5px; }
+    .day .pnl { font-size: 12px; }
+    .day .count { display: none; }
+    .month-label { min-width: 140px; font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>PnL <span>Calendar</span></h1>
+    <div class="month-nav">
+      <button id="prevBtn" aria-label="Previous month">&larr;</button>
+      <div class="month-label" id="monthLabel"></div>
+      <button id="nextBtn" aria-label="Next month">&rarr;</button>
+      <button id="todayBtn">Today</button>
+    </div>
+    <div class="toolbar">
+      <button id="exportBtn">Export</button>
+      <button id="importBtn">Import</button>
+      <input type="file" id="importFile" accept=".json" hidden>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="label">Monthly P&amp;L</div><div class="value" id="statTotal">$0.00</div></div>
+    <div class="stat"><div class="label">Win Rate (days)</div><div class="value" id="statWinRate">–</div></div>
+    <div class="stat"><div class="label">Green / Red Days</div><div class="value" id="statDays">0 / 0</div></div>
+    <div class="stat"><div class="label">Best Day</div><div class="value" id="statBest">–</div></div>
+    <div class="stat"><div class="label">Worst Day</div><div class="value" id="statWorst">–</div></div>
+    <div class="stat"><div class="label">Trades</div><div class="value" id="statTrades">0</div></div>
+  </div>
+
+  <div class="calendar">
+    <div class="weekdays">
+      <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+    </div>
+    <div id="grid"></div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="modalDate"></h2>
+      <div class="day-total" id="modalTotal"></div>
+      <button class="close-btn" id="closeModal" aria-label="Close">&times;</button>
+    </div>
+    <div class="trade-list" id="tradeList"></div>
+    <form class="trade-form" id="tradeForm">
+      <div>
+        <label for="symInput">Symbol</label>
+        <input id="symInput" type="text" placeholder="AAPL" autocomplete="off" required>
+      </div>
+      <div>
+        <label for="pnlInput">P&amp;L ($)</label>
+        <input id="pnlInput" type="number" step="any" placeholder="-150.50" required>
+      </div>
+      <div class="full">
+        <label for="noteInput">Notes (optional)</label>
+        <input id="noteInput" type="text" placeholder="Breakout long, stopped out" autocomplete="off">
+      </div>
+      <button type="submit">Add Trade</button>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  const STORAGE_KEY = 'pnl-calendar-trades-v1';
+
+  // Data shape: { "YYYY-MM-DD": [ { symbol, pnl, note }, ... ] }
+  let trades = load();
+  let view = new Date();
+  view.setDate(1);
+  let selectedKey = null;
+
+  function load() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+    } catch (e) {
+      return {};
+    }
+  }
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(trades));
+  }
+
+  function dateKey(y, m, d) {
+    return y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+  }
+  function fmtMoney(n) {
+    const sign = n < 0 ? '-' : '';
+    return sign + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function dayTotal(key) {
+    return (trades[key] || []).reduce((s, t) => s + t.pnl, 0);
+  }
+
+  function render() {
+    const y = view.getFullYear();
+    const m = view.getMonth();
+    document.getElementById('monthLabel').textContent =
+      view.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+
+    const firstDow = new Date(y, m, 1).getDay();
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const today = new Date();
+    const todayKey = dateKey(today.getFullYear(), today.getMonth(), today.getDate());
+
+    let week = document.createElement('div');
+    week.className = 'week';
+    for (let i = 0; i < firstDow; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'day empty';
+      week.appendChild(cell);
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = dateKey(y, m, d);
+      const list = trades[key] || [];
+      const total = dayTotal(key);
+
+      const cell = document.createElement('div');
+      cell.className = 'day';
+      if (list.length) cell.classList.add(total >= 0 ? 'profit' : 'loss');
+      if (key === todayKey) cell.classList.add('today');
+
+      const num = document.createElement('span');
+      num.className = 'num';
+      num.textContent = d;
+      cell.appendChild(num);
+
+      if (list.length) {
+        const pnl = document.createElement('span');
+        pnl.className = 'pnl ' + (total >= 0 ? 'pos' : 'neg');
+        pnl.textContent = fmtMoney(total);
+        cell.appendChild(pnl);
+
+        const count = document.createElement('span');
+        count.className = 'count';
+        count.textContent = list.length + (list.length === 1 ? ' trade' : ' trades');
+        cell.appendChild(count);
+      }
+
+      cell.addEventListener('click', () => openDay(key));
+      week.appendChild(cell);
+
+      if ((firstDow + d) % 7 === 0 || d === daysInMonth) {
+        while (week.children.length < 7) {
+          const filler = document.createElement('div');
+          filler.className = 'day empty';
+          week.appendChild(filler);
+        }
+        grid.appendChild(week);
+        week = document.createElement('div');
+        week.className = 'week';
+      }
+    }
+
+    renderStats(y, m, daysInMonth);
+  }
+
+  function renderStats(y, m, daysInMonth) {
+    let total = 0, greenDays = 0, redDays = 0, tradeCount = 0;
+    let best = null, worst = null;
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = dateKey(y, m, d);
+      const list = trades[key] || [];
+      if (!list.length) continue;
+      const t = dayTotal(key);
+      total += t;
+      tradeCount += list.length;
+      if (t >= 0) greenDays++; else redDays++;
+      if (best === null || t > best) best = t;
+      if (worst === null || t < worst) worst = t;
+    }
+
+    const tradedDays = greenDays + redDays;
+    setStat('statTotal', fmtMoney(total), total);
+    document.getElementById('statWinRate').textContent =
+      tradedDays ? Math.round((greenDays / tradedDays) * 100) + '%' : '–';
+    document.getElementById('statDays').innerHTML =
+      '<span class="pos">' + greenDays + '</span> / <span class="neg">' + redDays + '</span>';
+    setStat('statBest', best === null ? '–' : fmtMoney(best), best === null ? 0 : best);
+    setStat('statWorst', worst === null ? '–' : fmtMoney(worst), worst === null ? 0 : worst);
+    document.getElementById('statTrades').textContent = tradeCount;
+  }
+
+  function setStat(id, text, value) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.classList.toggle('pos', value > 0);
+    el.classList.toggle('neg', value < 0);
+  }
+
+  // --- Day modal ---
+  const overlay = document.getElementById('overlay');
+
+  function openDay(key) {
+    selectedKey = key;
+    const [yy, mm, dd] = key.split('-').map(Number);
+    document.getElementById('modalDate').textContent =
+      new Date(yy, mm - 1, dd).toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' });
+    renderModal();
+    overlay.classList.add('open');
+    document.getElementById('symInput').focus();
+  }
+
+  function renderModal() {
+    const list = trades[selectedKey] || [];
+    const total = dayTotal(selectedKey);
+    const totalEl = document.getElementById('modalTotal');
+    totalEl.textContent = list.length ? fmtMoney(total) : '';
+    totalEl.className = 'day-total ' + (total >= 0 ? 'pos' : 'neg');
+
+    const container = document.getElementById('tradeList');
+    container.innerHTML = '';
+    if (!list.length) {
+      const empty = document.createElement('div');
+      empty.className = 'no-trades';
+      empty.textContent = 'No trades logged for this day.';
+      container.appendChild(empty);
+      return;
+    }
+    list.forEach((t, i) => {
+      const row = document.createElement('div');
+      row.className = 'trade';
+
+      const sym = document.createElement('span');
+      sym.className = 'sym';
+      sym.textContent = t.symbol;
+
+      const note = document.createElement('span');
+      note.className = 'note';
+      note.textContent = t.note || '';
+
+      const amt = document.createElement('span');
+      amt.className = 'amt ' + (t.pnl >= 0 ? 'pos' : 'neg');
+      amt.textContent = fmtMoney(t.pnl);
+
+      const del = document.createElement('button');
+      del.className = 'del';
+      del.textContent = '×';
+      del.title = 'Delete trade';
+      del.addEventListener('click', () => {
+        list.splice(i, 1);
+        if (!list.length) delete trades[selectedKey];
+        save();
+        renderModal();
+        render();
+      });
+
+      row.append(sym, note, amt, del);
+      container.appendChild(row);
+    });
+  }
+
+  function closeModal() {
+    overlay.classList.remove('open');
+    selectedKey = null;
+    document.getElementById('tradeForm').reset();
+  }
+
+  document.getElementById('tradeForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const symbol = document.getElementById('symInput').value.trim().toUpperCase();
+    const pnl = parseFloat(document.getElementById('pnlInput').value);
+    const note = document.getElementById('noteInput').value.trim();
+    if (!symbol || isNaN(pnl)) return;
+
+    (trades[selectedKey] = trades[selectedKey] || []).push({ symbol, pnl, note });
+    save();
+    e.target.reset();
+    document.getElementById('symInput').focus();
+    renderModal();
+    render();
+  });
+
+  document.getElementById('closeModal').addEventListener('click', closeModal);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && overlay.classList.contains('open')) closeModal();
+  });
+
+  // --- Navigation ---
+  document.getElementById('prevBtn').addEventListener('click', () => {
+    view.setMonth(view.getMonth() - 1);
+    render();
+  });
+  document.getElementById('nextBtn').addEventListener('click', () => {
+    view.setMonth(view.getMonth() + 1);
+    render();
+  });
+  document.getElementById('todayBtn').addEventListener('click', () => {
+    view = new Date();
+    view.setDate(1);
+    render();
+  });
+
+  // --- Export / Import ---
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(trades, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'pnl-calendar-export.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  const importFile = document.getElementById('importFile');
+  document.getElementById('importBtn').addEventListener('click', () => importFile.click());
+  importFile.addEventListener('change', () => {
+    const file = importFile.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (typeof data !== 'object' || data === null || Array.isArray(data)) throw new Error('bad format');
+        for (const key of Object.keys(data)) {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || !Array.isArray(data[key])) throw new Error('bad format');
+          data[key] = data[key]
+            .filter((t) => t && typeof t.symbol === 'string' && typeof t.pnl === 'number')
+            .map((t) => ({ symbol: t.symbol, pnl: t.pnl, note: typeof t.note === 'string' ? t.note : '' }));
+        }
+        trades = data;
+        save();
+        render();
+        alert('Import successful.');
+      } catch (e) {
+        alert('Invalid file: expected a JSON export from this app.');
+      }
+      importFile.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
